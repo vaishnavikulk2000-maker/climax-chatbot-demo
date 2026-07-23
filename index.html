@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Climax Internal Support Assistant</title>
+    
+    <!-- Dialogflow Messenger Stylesheets & Scripts -->
+    <link rel="stylesheet" href="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/themes/df-messenger-default.css">
+    <script src="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/df-messenger.js"></script>
+
+    <style>
+        body {
+            font-family: 'Google Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header-container {
+            text-align: center;
+            max-width: 850px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #003366; /* Climax Industrial Blue accent */
+            padding-bottom: 15px;
+            width: 100%;
+        }
+        h1 {
+            color: #003366;
+            margin: 0 0 8px 0;
+            font-size: 26px;
+        }
+        p {
+            color: #555;
+            margin: 0;
+            font-size: 15px;
+        }
+        
+        /* Custom layout for central chat box with Climax styling flavor */
+        df-messenger {
+            position: relative !important;
+            bottom: auto !important;
+            right: auto !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            max-width: 850px !important;
+            height: 650px !important;
+            margin: 0 auto !important;
+            display: block !important;
+            box-shadow: 0 6px 20px rgba(0, 51, 102, 0.12);
+            border-radius: 10px;
+            z-index: 999;
+            
+            /* Theme overrides */
+            --df-messenger-font-color: #1f1f1f;
+            --df-messenger-font-family: 'Google Sans', sans-serif;
+            --df-messenger-chat-background: #FFFFFF;
+            --df-messenger-message-user-background: #003366;
+            --df-messenger-message-user-font-color: #FFFFFF;
+            --df-messenger-message-bot-background: #EAF0F6;
+            --df-messenger-primary-color: #003366;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-container">
+        <h1>Climax Portable Machining</h1>
+        <p>Internal Technical Support & Documentation Assistant</p>
+    </div>
+
+    <!-- Dialogflow Messenger Component with Quick Reply Buttons -->
+    <df-messenger
+      intent="WELCOME"
+      location="us-central1"
+      project-id="sfe-ai-chatbot"
+      agent-id="36161393-92f2-439e-91bf-20e7d469b325"
+      language-code="en"
+      max-query-length="-1"
+      allow-feedback="all">
+      <df-messenger-chat
+        chat-title="Climax Help"
+        chat-title-icon="https://storage.cloud.google.com/sfe-brands-docs/Screenshot 2026-06-15 143925.png">
+        
+        <!-- Pre-loaded suggestion chips (buttons) accompanying the greeting -->
+        <df-messenger-message-chip>Contact customer support</df-messenger-message-chip>
+        <df-messenger-message-chip>Know more about a product</df-messenger-message-chip>
+        <df-messenger-message-chip>Troubleshooting guide</df-messenger-message-chip>
+        
+      </df-messenger-chat>
+    </df-messenger>
+
+</body>
+</html>
