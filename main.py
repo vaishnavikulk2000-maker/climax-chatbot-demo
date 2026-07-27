@@ -31,7 +31,9 @@ from google.cloud import storage
 from flask import Request
 
 # Only allow this exact origin. All responses will include this origin if the incoming Origin matches.
-ALLOWED_ORIGIN = "https://sfeintegrations-coder.github.io/climax-chatbot/"
+#ALLOWED_ORIGIN = "https://sfeintegrations-coder.github.io/climax-chatbot/"
+ALLOWED_ORIGIN = "https://vaishnavikulk2000-maker.github.io/climax-chatbot-demo/"
+
 
 def _cors_headers(allow_origin):
     """Construct minimal CORS headers used for all responses."""
@@ -58,7 +60,7 @@ def get_secure_file_url(request: Request):
     origin = request.headers.get("Origin", "")
     if request.method == "OPTIONS":
         # Only respond positively to OPTIONS if origin exactly matches the configured allowed origin.
-        if origin != ALLOWED_ORIGIN:
+        if origin not in ALLOWED_ORIGIN:
             return ("", 403, _cors_headers("null"))
         headers = _cors_headers(ALLOWED_ORIGIN)
         headers["Access-Control-Max-Age"] = "3600"

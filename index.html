@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Climax Internal Support Assistant</title>
-    
+
     <!-- Dialogflow Messenger Stylesheets & Scripts -->
     <link rel="stylesheet" href="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/themes/df-messenger-default.css">
     <script src="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/df-messenger.js"></script>
-
+    <!-- Include reCAPTCHA v3 library in the head. Replace YOUR_RECAPTCHA_SITE_KEY with your real site key. -->
+    <script src="https://www.google.com/recaptcha/api.js?render=6Lfeb2gtAAAAAGjBVvxiLafc1ziPy-GMzeOVsNIg"></script>
     <style>
         body {
             font-family: 'Google Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -19,6 +20,7 @@
             flex-direction: column;
             align-items: center;
         }
+
         .header-container {
             text-align: center;
             max-width: 850px;
@@ -27,17 +29,19 @@
             padding-bottom: 15px;
             width: 100%;
         }
+
         h1 {
             color: #003366;
             margin: 0 0 8px 0;
             font-size: 26px;
         }
+
         p {
             color: #555;
             margin: 0;
             font-size: 15px;
         }
-        
+
         /* Custom layout for central chat box with Climax styling flavor */
         df-messenger {
             position: relative !important;
@@ -53,7 +57,6 @@
             box-shadow: 0 6px 20px rgba(0, 51, 102, 0.12);
             border-radius: 10px;
             z-index: 999;
-            
             /* Theme overrides */
             --df-messenger-font-color: #1f1f1f;
             --df-messenger-font-family: 'Google Sans', sans-serif;
@@ -73,25 +76,201 @@
     </div>
 
     <!-- Dialogflow Messenger Component with Quick Reply Buttons -->
-    <df-messenger
-      intent="WELCOME"
-      location="us-central1"
-      project-id="sfe-ai-chatbot"
-      agent-id="36161393-92f2-439e-91bf-20e7d469b325"
-      language-code="en"
-      max-query-length="-1"
-      allow-feedback="all">
-      <df-messenger-chat
-        chat-title="Climax Help"
-        chat-title-icon="https://storage.cloud.google.com/sfe-brands-docs/Screenshot 2026-06-15 143925.png">
-        
-        <!-- Pre-loaded suggestion chips (buttons) accompanying the greeting -->
-        <df-messenger-message-chip>Contact customer support</df-messenger-message-chip>
-        <df-messenger-message-chip>Know more about a product</df-messenger-message-chip>
-        <df-messenger-message-chip>Troubleshooting guide</df-messenger-message-chip>
-        
-      </df-messenger-chat>
+    <df-messenger intent="WELCOME"
+                  location="us-central1"
+                  project-id="sfe-ai-chatbot"
+                  agent-id="36161393-92f2-439e-91bf-20e7d469b325"
+                  language-code="en"
+                  max-query-length="-1"
+                  allow-feedback="all">
+        <df-messenger-chat chat-title="Climax Help"
+                           chat-title-icon="https://storage.cloud.google.com/sfe-brands-docs/Screenshot 2026-06-15 143925.png">
+
+            <!-- Pre-loaded suggestion chips (buttons) accompanying the greeting -->
+            <df-messenger-message-chip>Contact customer support</df-messenger-message-chip>
+            <df-messenger-message-chip>Know more about a product</df-messenger-message-chip>
+            <df-messenger-message-chip>Troubleshooting guide</df-messenger-message-chip>
+
+        </df-messenger-chat>
     </df-messenger>
+    <script>
+        /*
+          Dialogflow Messenger integration + secure file access guard.
+
+          High-level flow (client-side):
+          1) User clicks a link shown inside the Dialogflow messenger UI (often inside the element's Shadow DOM).
+          2) This script intercepts the click (capturing phase), extracts the intended file path.
+          3) requestFileAccess(filename) runs grecaptcha.execute(...) to obtain a browser token.
+          4) The token and filename are POSTed to the Cloud Function.
+          5) On success, the Cloud Function returns a short-lived signed URL; we open it in a new window.
+
+          Security notes (interaction via Shadow DOM):
+          - Dialogflow's <df-messenger> renders content inside a Shadow DOM. Click events are retargeted
+            but still composed: we use event.composedPath() to determine if the origin of the click was inside
+            the df-messenger element. This helps ensure we only gate links appearing inside the chat UI.
+          - The reCAPTCHA token is handled entirely in-browser and sent to the server for server-side
+            validation. The server verifies the token with the secret key that never appears in the browser.
+        */
+
+        (function () {
+            // Replace with your function URL
+            const CLOUD_FUNCTION_URL = "https://console.cloud.google.com/run/detail/us-central1/get-secure-file-url/";
+            // Replace with your reCAPTCHA v3 site key (same as the script include)
+            const RECAPTCHA_SITE_KEY = "6Lfeb2gtAAAAAGjBVvxiLafc1ziPy-GMzeOVsNIg";
+
+            // Utility: determine if the composed path contains a <df-messenger> node.
+            function clickOriginatedInDialogflow(composedPath) {
+                for (const node of composedPath) {
+                    try {
+                        if (!node) continue;
+                        if (node.tagName && node.tagName.toUpperCase() === "DF-MESSENGER") {
+                            return true;
+                        }
+                    } catch (e) {
+                        // ignore nodes that throw on inspection
+                    }
+                }
+                return false;
+            }
+
+            // Attempt to extract a "file path" for gating from an anchor element:
+            // - Prefer a data-filepath attribute injected into the message payload (recommended).
+            // - Fallback: if the href contains '/sfe-brands-docs/' or a custom scheme like 'gcs://', derive filename.
+            function extractFilePathFromAnchor(anchor) {
+                if (!anchor) return null;
+                // Preferred explicit attribute (you should ensure the bot / message payload sets this)
+                const dataPath = anchor.getAttribute && anchor.getAttribute("data-filepath");
+                if (dataPath) return dataPath;
+
+                const href = anchor.getAttribute && anchor.getAttribute("href");
+                if (!href) return null;
+
+                // If payload uses a custom scheme like gcs://path/to/file.pdf
+                if (href.startsWith("gcs://")) {
+                    return href.replace("gcs://", "");
+                }
+
+                // If payload links directly to a Google Storage public-style URL that includes bucket name,
+                // extract the path after the bucket name.
+                // Example: https://storage.googleapis.com/sfe-brands-docs/path/to/file.pdf
+                try {
+                    const url = new URL(href, location.href);
+                    const bucketSegment = "/sfe-brands-docs/";
+                    const idx = url.pathname.indexOf(bucketSegment);
+                    if (idx !== -1) {
+                        return url.pathname.slice(idx + bucketSegment.length);
+                    }
+                } catch (e) {
+                    // not a valid URL; ignore
+                }
+
+                return null;
+            }
+
+            // Core routine: request a signed URL for a given file (filename is path inside bucket)
+            async function requestFileAccess(filename) {
+                // Run reCAPTCHA v3 to obtain a token for server verification.
+                // We request the action "download" to help server-side risk analysis (optional).
+                try {
+                    const token = await grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: "download" });
+
+                    // Structure the payload expected by the Cloud Function
+                    const payload = {
+                        filename: filename,
+                        recaptcha_token: token
+                    };
+
+                    // Call the Cloud Function (CORS must be configured to allow your origin).
+                    const resp = await fetch(CLOUD_FUNCTION_URL, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        // Do not include credentials by default for GitHub Pages origin unless intentionally needed
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!resp.ok) {
+                        // Try to read error message returned by the function for better UX
+                        let errText = "Access denied or server error.";
+                        try {
+                            const errJson = await resp.json();
+                            if (errJson && errJson.error) errText = errJson.error;
+                        } catch (e) {
+                            // ignore parse errors
+                        }
+                        alert("File access denied: " + errText);
+                        return;
+                    }
+
+                    const json = await resp.json();
+                    if (!json || !json.signed_url) {
+                        alert("Unexpected server response. Could not retrieve file.");
+                        return;
+                    }
+
+                    // Open the signed URL in a new tab/window. The signed URL is short-lived and single-purpose (GET).
+                    window.open(json.signed_url, "_blank", "noopener,noreferrer");
+                } catch (err) {
+                    // Graceful error handling to the user
+                    console.error("requestFileAccess error:", err);
+                    alert("Unable to request file access at this time. Please try again later.");
+                }
+            }
+
+            // Intercept clicks originating from inside Dialogflow Messenger
+            // We use capture:true to see events before Dialogflow or other handlers stop propagation.
+            document.addEventListener("click", function (ev) {
+                try {
+                    // Obtain composedPath to detect events from inside a Shadow DOM (Dialogflow uses this).
+                    const cp = ev.composedPath ? ev.composedPath() : [];
+
+                    // Only proceed if the click originated from inside df-messenger
+                    if (!clickOriginatedInDialogflow(cp)) return;
+
+                    // Find the first anchor element in the path
+                    let anchor = null;
+                    for (const node of cp) {
+                        if (!node) continue;
+                        if (node.nodeType === Node.ELEMENT_NODE && node.tagName && node.tagName.toUpperCase() === "A") {
+                            anchor = node;
+                            break;
+                        }
+                    }
+
+                    if (!anchor) return;
+
+                    // Try to extract a gated filename from anchor. If found, intercept and gate access.
+                    const filename = extractFilePathFromAnchor(anchor);
+                    if (!filename) return; // not a gated link
+
+                    // Prevent default navigation and gate access via reCAPTCHA + Cloud Function
+                    ev.preventDefault();
+                    ev.stopPropagation();
+
+                    // CALL the access routine; it will open the signed URL on success
+                    requestFileAccess(filename);
+                } catch (e) {
+                    // Swallow exceptions here to avoid breaking the chat UI
+                    console.error("Error in dialogflow click interceptor:", e);
+                }
+            }, true); // capture phase to intercept before other handlers
+
+            // Optional helper: expose a programmatic hook so other scripts can request access directly
+            window.requestGcsFileAccess = requestFileAccess;
+
+            /*
+              Implementation notes / recommendations:
+              - Bot authors should render links with a data-filepath attribute (data-filepath="path/inside/bucket.pdf")
+                so the client-side extraction is trivial and reliable.
+              - Avoid placing direct public URLs to the private bucket in message payloads. Use the custom attribute or
+                a custom scheme (gcs://...) the client code understands.
+              - The Shadow DOM retargeting semantics mean node references in composedPath are safe to inspect for
+                host element detection (we check for DF-MESSENGER).
+              - Do not attempt to place RECAPTCHA_SECRET in client code or in message payloads. The secret must remain server-side.
+            */
+        })();
+    </script>
 
 </body>
 </html>
