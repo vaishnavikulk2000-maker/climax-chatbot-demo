@@ -30,9 +30,10 @@ import requests
 from google.cloud import storage
 from flask import Request
 
-# Only allow this exact origin. All responses will include this origin if the incoming Origin matches.
-#ALLOWED_ORIGIN = "https://sfeintegrations-coder.github.io/climax-chatbot/"
-ALLOWED_ORIGIN = "https://vaishnavikulk2000-maker.github.io"
+# Allow requests originating from your GitHub domain root
+ALLOWED_ORIGINS = [
+    "https://vaishnavikulk2000-maker.github.io",
+]
 
 def _cors_headers(allow_origin):
     """Construct minimal CORS headers used for all responses."""
@@ -57,23 +58,23 @@ def get_secure_file_url(request: Request):
     """
     # Handle CORS preflight first
     origin = request.headers.get("Origin", "")
+    # Check if the incoming origin is trusted
+    is_allowed = any(origin.startswith(allowed) for allowed in ALLOWED_ORIGINS)
+    matched_origin = origin if is_allowed else "null"
     if request.method == "OPTIONS":
         # Only respond positively to OPTIONS if origin exactly matches the configured allowed origin.
-        if origin not in ALLOWED_ORIGIN:
+        if not is_allowed:
             return ("", 403, _cors_headers("null"))
-        headers = _cors_headers(ALLOWED_ORIGIN)
+        headers = _cors_headers(matched_origin)
         headers["Access-Control-Max-Age"] = "3600"
         return ("", 204, headers)
 
     # Only accept POST for endpoint operation
     if request.method != "POST":
-        # for incorrect methods return 405; include CORS header only if origin matches
-        allow_origin = ALLOWED_ORIGIN if origin == ALLOWED_ORIGIN else "null"
-        return (json.dumps({"error": "Method not allowed"}), 405, _cors_headers(allow_origin))
+        return (json.dumps({"error": "Method not allowed"}), 405, _cors_headers(matched_origin))
 
-    # Enforce origin on main requests as well
-    if origin != ALLOWED_ORIGIN:
-        # Return explicit 403 for disallowed origins and provide a safe CORS header
+    # Enforce origin on main requests
+    if not is_allowed:
         return (json.dumps({"error": "Origin not allowed"}), 403, _cors_headers("null"))
 
     # Parse JSON body
