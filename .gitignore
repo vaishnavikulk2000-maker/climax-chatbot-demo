@@ -1,0 +1,4 @@
+# not a code file; add to your repository root
+.env
+*.pyc
+__pycache__/
