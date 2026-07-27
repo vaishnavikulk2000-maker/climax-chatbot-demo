@@ -169,32 +169,36 @@
 
             window.requestGcsFileAccess = requestFileAccess;
 
-            document.addEventListener("click", function (event) {
-                const target = event.target.closest("a");
-                if (!target) return;
+            // Intercept clicks inside Dialogflow Messenger's Shadow DOM
+            const dfMessenger = document.querySelector("df-messenger");
+            if (dfMessenger) {
+                dfMessenger.addEventListener("click", function (event) {
+                    const target = event.target.closest("a");
+                    if (!target) return;
 
-                const href = target.getAttribute("href");
-                if (!href) return;
+                    const href = target.getAttribute("href");
+                    if (!href) return;
 
-                if (href.includes("storage.cloud.google.com/sfe-brands-docs/") || href.includes("storage.googleapis.com/sfe-brands-docs/")) {
-                    event.preventDefault();
-                    try {
-                        const urlObj = new URL(href);
-                        let pathname = urlObj.pathname;
+                    if (href.includes("storage.cloud.google.com/sfe-brands-docs/") || href.includes("storage.googleapis.com/sfe-brands-docs/")) {
+                        event.preventDefault();
+                        try {
+                            const urlObj = new URL(href);
+                            let pathname = urlObj.pathname;
 
-                        if (pathname.startsWith("/sfe-brands-docs/")) {
-                            pathname = pathname.replace("/sfe-brands-docs/", "");
-                        } else if (pathname.startsWith("/")) {
-                            pathname = pathname.substring(1);
+                            if (pathname.startsWith("/sfe-brands-docs/")) {
+                                pathname = pathname.replace("/sfe-brands-docs/", "");
+                            } else if (pathname.startsWith("/")) {
+                                pathname = pathname.substring(1);
+                            }
+
+                            requestFileAccess(decodeURIComponent(pathname));
+                        } catch (e) {
+                            console.error("Error parsing source link path:", e);
+                            window.open(href, "_blank");
                         }
-
-                        requestFileAccess(decodeURIComponent(pathname));
-                    } catch (e) {
-                        console.error("Error parsing source link path:", e);
-                        window.open(href, "_blank");
                     }
-                }
-            });
+                }, true); // Use capture phase to intercept before navigation
+            }   
         })();
     </script>
 
