@@ -32,8 +32,7 @@ from flask import Request
 
 # Only allow this exact origin. All responses will include this origin if the incoming Origin matches.
 #ALLOWED_ORIGIN = "https://sfeintegrations-coder.github.io/climax-chatbot/"
-ALLOWED_ORIGIN = "https://vaishnavikulk2000-maker.github.io/climax-chatbot-demo/"
-
+ALLOWED_ORIGIN = "https://vaishnavikulk2000-maker.github.io"
 
 def _cors_headers(allow_origin):
     """Construct minimal CORS headers used for all responses."""
