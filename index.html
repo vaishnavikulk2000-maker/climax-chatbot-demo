@@ -97,21 +97,16 @@
     <script src="https://www.google.com/recaptcha/api.js?render=6Lfeb2gtAAAAAGjBVvxiLafc1ziPy-GMzeOVsNIg"></script>
 
     <script>
-        /* Improved grecaptcha usage: wait for grecaptcha.ready, add timeout, clearer errors.
-           Make sure CLOUD_FUNCTION_URL below is your local or deployed function URL.
-        */
         (function () {
             const CLOUD_FUNCTION_URL = "https://us-central1-sfe-ai-chatbot.cloudfunctions.net/get_secure_file_url"
             const RECAPTCHA_SITE_KEY = "6Lfeb2gtAAAAAGjBVvxiLafc1ziPy-GMzeOVsNIg"
 
-            // Helper: get a grecaptcha token, with timeout and readiness check
             function getRecaptchaToken(action, timeoutMs = 8000) {
                 return new Promise((resolve, reject) => {
                     if (typeof grecaptcha === "undefined") {
                         return reject(new Error("grecaptcha not loaded"));
                     }
                     let resolved = false;
-                    // Timeout safety
                     const to = setTimeout(() => {
                         if (resolved) return;
                         resolved = true;
@@ -142,10 +137,8 @@
                 });
             }
 
-            // Example: patched function that uses getRecaptchaToken
             async function requestFileAccess(filename) {
                 try {
-                    // wait for a token (or fail with clear error)
                     const token = await getRecaptchaToken("download", 8000);
 
                     const payload = { filename, recaptcha_token: token };
@@ -174,8 +167,34 @@
                 }
             }
 
-            // expose for manual testing in console:
             window.requestGcsFileAccess = requestFileAccess;
+
+            document.addEventListener("click", function (event) {
+                const target = event.target.closest("a");
+                if (!target) return;
+
+                const href = target.getAttribute("href");
+                if (!href) return;
+
+                if (href.includes("storage.cloud.google.com/sfe-brands-docs/") || href.includes("storage.googleapis.com/sfe-brands-docs/")) {
+                    event.preventDefault();
+                    try {
+                        const urlObj = new URL(href);
+                        let pathname = urlObj.pathname;
+
+                        if (pathname.startsWith("/sfe-brands-docs/")) {
+                            pathname = pathname.replace("/sfe-brands-docs/", "");
+                        } else if (pathname.startsWith("/")) {
+                            pathname = pathname.substring(1);
+                        }
+
+                        requestFileAccess(decodeURIComponent(pathname));
+                    } catch (e) {
+                        console.error("Error parsing source link path:", e);
+                        window.open(href, "_blank");
+                    }
+                }
+            });
         })();
     </script>
 
