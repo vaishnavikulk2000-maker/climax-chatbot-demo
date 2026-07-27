@@ -31,7 +31,7 @@ from google.cloud import storage
 from flask import Request
 
 # Allow requests originating from your GitHub domain root
-ALLOWED_ORIGINS = [
+matched_originS = [
     "https://vaishnavikulk2000-maker.github.io",
 ]
 
@@ -59,7 +59,7 @@ def get_secure_file_url(request: Request):
     # Handle CORS preflight first
     origin = request.headers.get("Origin", "")
     # Check if the incoming origin is trusted
-    is_allowed = any(origin.startswith(allowed) for allowed in ALLOWED_ORIGINS)
+    is_allowed = any(origin.startswith(allowed) for allowed in matched_originS)
     matched_origin = origin if is_allowed else "null"
     if request.method == "OPTIONS":
         # Only respond positively to OPTIONS if origin exactly matches the configured allowed origin.
@@ -84,19 +84,19 @@ def get_secure_file_url(request: Request):
         payload = None
 
     if not payload or not isinstance(payload, dict):
-        return (json.dumps({"error": "Invalid JSON payload"}), 400, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "Invalid JSON payload"}), 400, _cors_headers(matched_origin))
 
     filename = payload.get("filename")
     recaptcha_token = payload.get("recaptcha_token")
 
     if not filename or not recaptcha_token:
-        return (json.dumps({"error": "Missing 'filename' or 'recaptcha_token'"}), 400, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "Missing 'filename' or 'recaptcha_token'"}), 400, _cors_headers(matched_origin))
 
     # Server-side reCAPTCHA verification (must use secret stored in environment variable)
     RECAPTCHA_SECRET = os.environ.get("RECAPTCHA_SECRET_KEY")
     if not RECAPTCHA_SECRET:
         # Misconfiguration — do not proceed if secret is missing
-        return (json.dumps({"error": "Server misconfiguration"}), 500, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "Server misconfiguration"}), 500, _cors_headers(matched_origin))
 
     # Call Google's reCAPTCHA siteverify endpoint (server-to-server)
     try:
@@ -106,29 +106,29 @@ def get_secure_file_url(request: Request):
             timeout=5,
         )
     except requests.RequestException:
-        return (json.dumps({"error": "reCAPTCHA verification request failed"}), 503, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "reCAPTCHA verification request failed"}), 503, _cors_headers(matched_origin))
 
     if r.status_code != 200:
-        return (json.dumps({"error": "reCAPTCHA verification failed"}), 403, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "reCAPTCHA verification failed"}), 403, _cors_headers(matched_origin))
 
     verification = r.json()
     # verification expected structure:
     # { "success": true|false, "score": float, "action": str, "challenge_ts": "...", "hostname": "..." }
     if not verification.get("success", False):
-        return (json.dumps({"error": "reCAPTCHA not successful"}), 403, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "reCAPTCHA not successful"}), 403, _cors_headers(matched_origin))
 
     score = float(verification.get("score", 0.0))
     # Enforce threshold (strict): reject anything below 0.5
     if score < 0.5:
         # Treat as bot / suspicious; deny access
-        return (json.dumps({"error": "reCAPTCHA score too low"}), 403, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "reCAPTCHA score too low"}), 403, _cors_headers(matched_origin))
 
     # Optionally: you can check verification.get("action") if you used an action label on client side
 
     # Check the file exists in the private GCS bucket
     BUCKET_NAME = os.environ.get("BUCKET_NAME")
     if not BUCKET_NAME:
-        return (json.dumps({"error": "Server misconfiguration: BUCKET_NAME missing"}), 500, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "Server misconfiguration: BUCKET_NAME missing"}), 500, _cors_headers(matched_origin))
 
     try:
         client = storage.Client()  # uses default credentials (function's service account)
@@ -137,10 +137,10 @@ def get_secure_file_url(request: Request):
         # Blob.exists requires a client
         if not blob.exists(client):
             # Do not leak bucket listing; simply say not found
-            return (json.dumps({"error": "File not found"}), 404, _cors_headers(ALLOWED_ORIGIN))
+            return (json.dumps({"error": "File not found"}), 404, _cors_headers(matched_origin))
     except Exception as e:
         # Unexpected storage error
-        return (json.dumps({"error": "Error checking file existence"}), 500, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "Error checking file existence"}), 500, _cors_headers(matched_origin))
 
     # Generate a v4 signed URL with strict 5-minute TTL
     try:
@@ -150,10 +150,10 @@ def get_secure_file_url(request: Request):
             method="GET",
         )
     except Exception as e:
-        return (json.dumps({"error": "Failed to generate signed URL"}), 500, _cors_headers(ALLOWED_ORIGIN))
+        return (json.dumps({"error": "Failed to generate signed URL"}), 500, _cors_headers(matched_origin))
 
     # Success: return signed URL as JSON with CORS headers matched to the origin
     response_body = json.dumps({"signed_url": signed_url})
-    headers = _cors_headers(ALLOWED_ORIGIN)
+    headers = _cors_headers(matched_origin)
     headers["Content-Type"] = "application/json"
     return (response_body, 200, headers)
