@@ -173,7 +173,9 @@
             const dfMessenger = document.querySelector("df-messenger");
             if (dfMessenger) {
                 dfMessenger.addEventListener("click", function (event) {
-                    const target = event.target.closest("a");
+                    // Use composedPath to see through the shadow DOM boundary
+                    const path = event.composedPath();
+                    const target = path.find(el => el.tagName === "A");
                     if (!target) return;
 
                     const href = target.getAttribute("href");
@@ -181,6 +183,7 @@
 
                     if (href.includes("storage.cloud.google.com/sfe-brands-docs/") || href.includes("storage.googleapis.com/sfe-brands-docs/")) {
                         event.preventDefault();
+                        event.stopPropagation();
                         try {
                             const urlObj = new URL(href);
                             let pathname = urlObj.pathname;
@@ -194,7 +197,6 @@
                             requestFileAccess(decodeURIComponent(pathname));
                         } catch (e) {
                             console.error("Error parsing source link path:", e);
-                            window.open(href, "_blank");
                         }
                     }
                 }, true); // Use capture phase to intercept before navigation
